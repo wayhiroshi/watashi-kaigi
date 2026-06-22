@@ -8,8 +8,6 @@
   <meta property="og:title" content="AIで考える、これからの私会議">
   <meta property="og:description" content="40代からの健康・美容・暮らしを、AIと一緒にやさしく整えるお茶会。">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="https://watashi-kaigi.way-hiroshi-66.workers.dev/top.png">
-  <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#fffaf2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,22 +23,32 @@
   </header>
 
   <main id="top">
-    <section class="hero hero-photo">
-      <div class="container">
-        <div class="hero-photo-frame">
-          <img
-            src="./top.png"
-            class="hero-main-image"
-            alt="自然光の入る神戸のカフェ風スペースで、女性たちがスマートフォンとノートを囲みながらお茶会をしているイメージ"
-            width="1536"
-            height="1024"
-          >
+    <section class="hero">
+      <div class="shape shape-a"></div><div class="shape shape-b"></div>
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">40代からの女性へ｜神戸・少人数お茶会</p>
+          <h1>最近、<br><span>なんとなく疲れて</span><br>いませんか？</h1>
+          <p class="lead">40代からの健康・美容・暮らしを、<br>AIと一緒にやさしく整えるお茶会</p>
+          <p class="event-name">AIで考える、これからの私会議</p>
+          <div class="hero-actions">
+            <a class="button primary" href="#entry">参加申し込みへ</a>
+            <a class="button secondary" href="#about">内容を見る</a>
+          </div>
         </div>
 
-        <div class="sr-only">
-          <h1>AIで考える、これからの私会議</h1>
-          <p>40代からの健康・美容・暮らしを、AIと一緒にやさしく整えるお茶会。</p>
-        </div>
+        <aside class="hero-card">
+          <div class="badge">初回限定 6名様</div>
+          <div class="illust" aria-hidden="true">
+            <div class="steam s1"></div><div class="steam s2"></div>
+            <div class="cup"></div>
+            <div class="phone"><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="note"><b>3か月プラン</b><span></span><span></span><span></span></div>
+            <div class="leaf l1"></div><div class="leaf l2"></div>
+          </div>
+          <h2>参加すると持ち帰れるもの</h2>
+          <p><strong>AIで作る<br>「これからの私」<br>3か月プラン</strong></p>
+        </aside>
       </div>
     </section>
 
