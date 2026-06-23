@@ -1,31 +1,26 @@
-# AIで考える、これからの私会議｜既存トップ画像維持版
+# AIで考える、これからの私会議｜再現実装版
 
-この版では、ユーザーが先に採用した美しい `top.png` をトップにそのまま使います。
+提供いただいたデザイン画像を基準に、実際に運用可能な HTML / CSS / 画像素材として組み直した版です。
 
-## 最重要
-この一式は、既存の `top.png` を置き換えない構成です。
-`index.html` のトップは必ず次を参照します。
-
-```html
-<img src="./top.png" class="hero-main-image">
-```
-
-したがって、既存プロジェクトへ反映する際は **今ある top.png を削除・置換しないでください。**
-
-## コピー対象
+## 含まれるファイル
 - `index.html`
 - `style.css`
 - `script.js`
-- `assets/assistant-plan.png`
+- `assets/`：トップ、キーコンセプト、3か月プラン、サポート表示に使う画像素材
 
-## 反映
+## 反映方法
+既存リポジトリの中身をこの一式で上書きし、以下を実行してください。
+
 ```bash
 cd ~/Documents/watashi-kaigi
-mkdir -p assets
-# 展開先から index.html style.css script.js と assets/assistant-plan.png をコピー
-git add index.html style.css script.js assets/assistant-plan.png
-git commit -m "Update concept while keeping original top image"
+git add .
+git commit -m "Recreate landing page design with assistant concept"
 git push
 ```
 
-`top.png` は `git add` しなくて大丈夫です。既にリポジトリにあるなら、そのまま維持されます。
+## フォーム
+現在は既存仕様の `mailto:` です。Cloudflare Worker + Resend に切り替えるまで、申込時にメールアプリが開きます。
+
+
+## 今回の調整
+申込フォームを、3カラム内の小さなフォームではなく、ページ下部の大きな専用申込セクションに戻しました。
