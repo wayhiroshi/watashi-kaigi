@@ -273,3 +273,231 @@ img{max-width:100%}a{color:inherit;text-decoration:none}.container{width:min(118
     font-size: 24px;
   }
 }
+
+
+/* =====================================================
+   Text-free top illustration hero
+   The image is decorative; all title/copy is editable HTML.
+   ===================================================== */
+.hero {
+  position: relative;
+  overflow: hidden;
+  min-height: clamp(610px, 56vw, 780px);
+  background: #f8f1e7;
+  border-bottom: 1px solid #eee4d7;
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 250, 244, .94) 0%,
+    rgba(255, 250, 244, .86) 31%,
+    rgba(255, 250, 244, .34) 52%,
+    rgba(255, 250, 244, 0) 72%
+  );
+  pointer-events: none;
+}
+
+.hero-grid {
+  position: relative;
+  z-index: 2;
+  display: block;
+  min-height: inherit;
+}
+
+.hero-copy {
+  width: min(48%, 570px);
+  padding: clamp(70px, 8vw, 118px) 0 58px;
+}
+
+.hero .tag {
+  display: inline-block;
+  margin: 0 0 20px;
+  padding: 6px 18px;
+  color: #dc7683;
+  background: rgba(255, 242, 240, .93);
+  border-radius: 7px;
+  font-size: clamp(14px, 1.6vw, 18px);
+  font-weight: 700;
+}
+
+.hero h1 {
+  margin: 0;
+  color: #4b3225;
+  font-family: "Noto Serif JP", serif;
+  font-size: clamp(43px, 5.1vw, 74px);
+  line-height: 1.3;
+  letter-spacing: .035em;
+}
+
+.hero .hero-lead {
+  margin: 22px 0 13px;
+  color: #e87582;
+  font-size: clamp(20px, 2.3vw, 30px);
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.hero .hero-text {
+  margin: 0;
+  color: #46362e;
+  font-size: clamp(14px, 1.35vw, 16px);
+  font-weight: 650;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.hero-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 47px;
+  padding: 11px 22px;
+  color: #fff;
+  background: linear-gradient(135deg, #e86f7d, #ef98a3);
+  border-radius: 999px;
+  box-shadow: 0 12px 20px rgba(218, 105, 120, .18);
+  font-size: 14px;
+  font-weight: 900;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.hero-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 28px rgba(218, 105, 120, .26);
+}
+
+.hero-link {
+  color: #715746;
+  border-bottom: 1px solid #bda48e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.hero .merit-list {
+  margin-top: 26px;
+}
+
+/* hero-right.png is preserved as a secondary "AI assistant" visual */
+.concept-ai-visual {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 16px;
+  align-items: center;
+  margin-top: 20px;
+  padding: 14px 15px 14px 18px;
+  background: linear-gradient(110deg, #f6fbf3, #fffaf7);
+  border: 1px solid #e4ebdf;
+  border-radius: 15px;
+}
+
+.concept-ai-visual b {
+  display: block;
+  margin-bottom: 5px;
+  color: #4f6c52;
+  font-size: 14px;
+}
+
+.concept-ai-visual span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.7;
+}
+
+.concept-ai-visual img {
+  display: block;
+  width: 100%;
+  max-height: 138px;
+  object-fit: cover;
+  object-position: right center;
+  border-radius: 10px;
+  mix-blend-mode: multiply;
+}
+
+@media (max-width: 900px) {
+  .hero {
+    min-height: 620px;
+  }
+
+  .hero-bg {
+    object-position: 59% center;
+  }
+
+  .hero::after {
+    background: linear-gradient(
+      180deg,
+      rgba(255,250,244,.93) 0%,
+      rgba(255,250,244,.90) 42%,
+      rgba(255,250,244,.22) 70%,
+      rgba(255,250,244,.05) 100%
+    );
+  }
+
+  .hero-copy {
+    width: min(100%, 610px);
+    padding-top: 52px;
+  }
+}
+
+@media (max-width: 620px) {
+  .hero {
+    min-height: 680px;
+  }
+
+  .hero-bg {
+    object-position: 62% center;
+  }
+
+  .hero-copy {
+    width: 100%;
+    padding-top: 42px;
+    padding-bottom: 34px;
+  }
+
+  .hero h1 {
+    font-size: 40px;
+  }
+
+  .hero .hero-lead {
+    font-size: 19px;
+  }
+
+  .hero-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .hero-button {
+    width: 100%;
+  }
+
+  .concept-ai-visual {
+    grid-template-columns: 1fr;
+  }
+
+  .concept-ai-visual img {
+    max-height: 180px;
+  }
+}
