@@ -1,24 +1,31 @@
-# AIで考える、これからの私会議 LP
+# AIで考える、これからの私会議｜既存トップ画像維持版
 
-Cloudflare Pagesにそのままアップできる静的HTML/CSS/JSです。
+この版では、ユーザーが先に採用した美しい `top.png` をトップにそのまま使います。
 
-## ファイル構成
+## 最重要
+この一式は、既存の `top.png` を置き換えない構成です。
+`index.html` のトップは必ず次を参照します。
 
+```html
+<img src="./top.png" class="hero-main-image">
+```
+
+したがって、既存プロジェクトへ反映する際は **今ある top.png を削除・置換しないでください。**
+
+## コピー対象
 - `index.html`
 - `style.css`
 - `script.js`
+- `assets/assistant-plan.png`
 
-## 使い方
+## 反映
+```bash
+cd ~/Documents/watashi-kaigi
+mkdir -p assets
+# 展開先から index.html style.css script.js と assets/assistant-plan.png をコピー
+git add index.html style.css script.js assets/assistant-plan.png
+git commit -m "Update concept while keeping original top image"
+git push
+```
 
-1. `script.js` の `OWNER_EMAIL` を申込受信用メールアドレスに変更します。
-2. Cloudflare Pagesでこのフォルダをデプロイします。
-3. この静的版では、送信時にメール作成画面が開きます。
-
-## 別アカウントでCloudflareにアップする場合
-
-優月なごみ用とは別のCloudflareアカウントで問題ありません。
-Cloudflare Pagesのプロジェクト名は `watashi-kaigi` や `ai-tea-kobe` などにしてください。
-
-## 次の拡張
-
-フォームを自動送信・DB保存にする場合は、Cloudflare Pages Functions / Workers / D1 / Turnstile などを追加してください。
+`top.png` は `git add` しなくて大丈夫です。既にリポジトリにあるなら、そのまま維持されます。

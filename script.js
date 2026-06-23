@@ -2,7 +2,7 @@ const form = document.getElementById("entryForm");
 const modal = document.getElementById("thanksModal");
 const mailtoLink = document.getElementById("mailtoLink");
 
-// 申込を受け取りたいメールアドレスに変更してください
+// 申込を受け取りたいメールアドレス
 const OWNER_EMAIL = "way.hiroshi.66@gmail.com";
 
 function setError(name, message) {
@@ -55,7 +55,6 @@ document.addEventListener("keydown", (event) => {
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   clearErrors();
-
   const formData = new FormData(form);
   const data = {
     name: String(formData.get("name") || "").trim(),
@@ -67,7 +66,6 @@ form.addEventListener("submit", (event) => {
     message: String(formData.get("message") || "").trim(),
     agree: formData.get("agree") === "on"
   };
-
   let hasError = false;
   if (!data.name) { setError("name", "お名前を入力してください。"); hasError = true; }
   if (!data.email) {
@@ -77,11 +75,9 @@ form.addEventListener("submit", (event) => {
   }
   if (!data.agree) { setError("agree", "同意にチェックを入れてください。"); hasError = true; }
   if (hasError) return;
-
   const subject = encodeURIComponent("【参加申込】AIで考える、これからの私会議");
   const body = encodeURIComponent(buildMailBody(data));
   const mailto = `mailto:${OWNER_EMAIL}?subject=${subject}&body=${body}`;
-
   openModal(mailto);
   window.location.href = mailto;
 });
