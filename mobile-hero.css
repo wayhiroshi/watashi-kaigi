@@ -1,0 +1,38 @@
+/* =====================================================
+   Smartphone top-image adjustment
+   PC版には一切影響させず、スマホだけでトップ画像を
+   文字の下までしっかり見せるための追加CSSです。
+   ===================================================== */
+
+@media (max-width: 620px) {
+  .hero {
+    min-height: 770px;
+  }
+
+  .hero-bg {
+    /* 女性たちとテーブルが画面下側に見える位置へ */
+    object-position: 61% 73%;
+  }
+
+  .hero::after {
+    /* 文字の背景は確保しつつ、下部のイラストは隠さない */
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255, 250, 244, .96) 0%,
+        rgba(255, 250, 244, .93) 39%,
+        rgba(255, 250, 244, .68) 53%,
+        rgba(255, 250, 244, .20) 66%,
+        rgba(255, 250, 244, 0) 82%
+      );
+  }
+
+  .hero-copy {
+    padding-top: 38px;
+    padding-bottom: 0;
+  }
+
+  .hero .merit-list {
+    margin-top: 20px;
+  }
+}
