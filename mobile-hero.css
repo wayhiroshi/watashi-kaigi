@@ -1,34 +1,33 @@
 /* =====================================================
    Smartphone top-image adjustment
-   PC版には一切影響させず、スマホだけでトップ画像を
-   文字の下までしっかり見せるための追加CSSです。
+   PC版には影響させず、スマホだけで人物の表情を上に見せ、
+   文字をその下へ配置するための追加CSSです。
    ===================================================== */
 
 @media (max-width: 620px) {
   .hero {
-    min-height: 820px;
+    min-height: 860px;
   }
 
   .hero-bg {
-    /* 女性たちとテーブルが画面下側に見える位置へ */
-    object-position: 61% 73%;
+    /* 人物の顔を上側に見せる */
+    object-position: 61% top;
   }
 
   .hero::after {
-    /* 文字部分は読みやすく保ちつつ、表情は見せる */
-    background:
-      linear-gradient(
-        180deg,
-        rgba(255, 250, 244, .96) 0%,
-        rgba(255, 250, 244, .92) 28%,
-        rgba(255, 250, 244, .62) 45%,
-        rgba(255, 250, 244, .18) 60%,
-        rgba(255, 250, 244, 0) 76%
-      );
+    /* 左側の文字だけを読みやすくし、顔まわりは白く覆いすぎない */
+    background: linear-gradient(
+      90deg,
+      rgba(255, 250, 244, .92) 0%,
+      rgba(255, 250, 244, .84) 42%,
+      rgba(255, 250, 244, .38) 66%,
+      rgba(255, 250, 244, 0) 86%
+    );
   }
 
   .hero-copy {
-    padding-top: 95px;
+    /* 表情より下へ文字を下げる */
+    padding-top: 195px;
     padding-bottom: 0;
   }
 
@@ -38,13 +37,32 @@
 
   .hero h1 {
     margin-bottom: 18px;
+    font-size: 40px;
+    line-height: 1.32;
   }
 
   .hero .hero-lead {
     margin: 16px 0 14px;
+    font-size: 19px;
+  }
+
+  .hero .hero-text {
+    font-size: 14px;
+    line-height: 1.75;
+  }
+
+  .hero-actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 13px;
+    margin-top: 22px;
+  }
+
+  .hero-button {
+    width: 100%;
   }
 
   .hero .merit-list {
-    margin-top: 18px;
+    margin-top: 20px;
   }
 }
