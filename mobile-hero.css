@@ -6,7 +6,7 @@
 
 @media (max-width: 620px) {
   .hero {
-    min-height: 770px;
+    min-height: 820px;
   }
 
   .hero-bg {
@@ -15,24 +15,36 @@
   }
 
   .hero::after {
-    /* 文字の背景は確保しつつ、下部のイラストは隠さない */
+    /* 文字部分は読みやすく保ちつつ、表情は見せる */
     background:
       linear-gradient(
         180deg,
         rgba(255, 250, 244, .96) 0%,
-        rgba(255, 250, 244, .93) 39%,
-        rgba(255, 250, 244, .68) 53%,
-        rgba(255, 250, 244, .20) 66%,
-        rgba(255, 250, 244, 0) 82%
+        rgba(255, 250, 244, .92) 28%,
+        rgba(255, 250, 244, .62) 45%,
+        rgba(255, 250, 244, .18) 60%,
+        rgba(255, 250, 244, 0) 76%
       );
   }
 
   .hero-copy {
-    padding-top: 38px;
+    padding-top: 95px;
     padding-bottom: 0;
   }
 
+  .hero .tag {
+    margin-bottom: 18px;
+  }
+
+  .hero h1 {
+    margin-bottom: 18px;
+  }
+
+  .hero .hero-lead {
+    margin: 16px 0 14px;
+  }
+
   .hero .merit-list {
-    margin-top: 20px;
+    margin-top: 18px;
   }
 }
