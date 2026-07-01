@@ -1,0 +1,20 @@
+{
+  "name": "watashi-kaigi",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "wrangler": "XDG_CONFIG_HOME=.wrangler/config wrangler",
+    "dev": "XDG_CONFIG_HOME=.wrangler/config wrangler dev --local --port 8787",
+    "deploy": "XDG_CONFIG_HOME=.wrangler/config wrangler deploy",
+    "deploy:dry-run": "XDG_CONFIG_HOME=.wrangler/config wrangler deploy --dry-run",
+    "check:js": "node --check script.js && node --check src/worker.js",
+    "verify": "npm run check:js && npm run deploy:dry-run",
+    "git:status": "git status --short --branch",
+    "git:publish": "scripts/git-publish.sh",
+    "secret:stripe": "XDG_CONFIG_HOME=.wrangler/config wrangler secret put STRIPE_SECRET_KEY"
+  },
+  "devDependencies": {
+    "wrangler": "^4.106.0"
+  }
+}

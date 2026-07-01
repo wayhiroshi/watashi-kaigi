@@ -179,7 +179,7 @@ img{max-width:100%}a{color:inherit;text-decoration:none}.container{width:min(118
   font-weight: 900;
 }
 
-.large-apply-card label span {
+.large-apply-card .form-row label span {
   display: inline-block;
   margin-left: 7px;
   padding: 2px 8px;
@@ -236,6 +236,11 @@ img{max-width:100%}a{color:inherit;text-decoration:none}.container{width:min(118
   font-weight: 900;
   cursor: pointer;
   box-shadow: 0 12px 20px rgba(218, 105, 120, .18);
+}
+
+.large-apply-card button:disabled {
+  opacity: .68;
+  cursor: wait;
 }
 
 .large-apply-card .form-note {

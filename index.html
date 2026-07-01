@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Serif+JP:wght@600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=stripe-checkout">
   <link rel="stylesheet" href="./mobile-hero.css">
 </head>
 <body>
@@ -50,7 +50,7 @@
             <li><span class="merit-icon">♧</span><span>少人数開催</span></li>
             <li><span class="merit-icon">♙</span><span>女性サポート同席</span></li>
             <li><span class="merit-icon">☕</span><span>お茶とお菓子付き</span></li>
-            <li><span class="merit-icon">¥</span><span>参加費<br>1,000円</span></li>
+            <li><span class="merit-icon">¥</span><span>参加費<br>2,000円</span></li>
           </ul>
         </div>
       </div>
@@ -156,7 +156,7 @@
           </div>
         </div>
 
-        <section class="large-apply-card" aria-labelledby="apply-title">
+        <section id="entry" class="large-apply-card" aria-labelledby="apply-title">
           <div class="large-apply-head">
             <div>
               <p>FIRST TIME WELCOME</p>
@@ -165,7 +165,7 @@
             <span>初回限定 6名様</span>
           </div>
 
-          <p class="apply-intro">フォーム送信後、内容を確認して主催者よりご連絡します。</p>
+          <p class="apply-intro">フォーム送信後、Stripeの安全な決済ページへ移動します。決済完了後、主催者よりご連絡します。</p>
 
           <form id="entryForm" novalidate>
             <div class="form-row">
@@ -206,12 +206,13 @@
 
             <label class="check">
               <input type="checkbox" name="agree" required>
-              <span>送信内容を確認し、主催者からの連絡を受け取ることに同意します。</span>
+              <span>送信内容を確認し、主催者からの連絡を受け取ることと、Stripe決済ページへ進むことに同意します。</span>
             </label>
             <p class="error-message" data-error-for="agree"></p>
+            <p class="error-message form-status" data-error-for="form" role="alert"></p>
 
-            <button type="submit">この内容で申し込む</button>
-            <p class="form-note">※現在は送信時にメール作成画面が開きます。</p>
+            <button type="submit">申込み内容を確認して決済へ進む</button>
+            <p class="form-note">※お支払いはStripeの決済ページで行います。カード情報はこのサイトには保存されません。</p>
           </form>
         </section>
       </div>
@@ -224,7 +225,7 @@
           <div><b>◷ 時間</b><span>90分程度</span></div>
           <div><b>♧ 形式</b><span>少人数（最大6名程度）</span></div>
           <div><b>⌖ 場所</b><span>マイスぺ24 神戸スペース<br>（お申し込み後にご案内します）</span></div>
-          <div><b>¥ 参加費</b><span>1,000円（お茶とお菓子付き）</span></div>
+          <div><b>¥ 参加費</b><span>2,000円（お茶とお菓子付き）</span></div>
         </div>
         <p>※スマホまたはノートパソコンをご持参ください。AI初心者の方も大歓迎です。</p>
         <img class="footer-leaf" src="./assets/footer-leaf.png" alt="" aria-hidden="true">
@@ -236,13 +237,13 @@
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="thanksTitle">
       <button class="modal-close" type="button" data-close-modal aria-label="閉じる">×</button>
-      <h2 id="thanksTitle">お申し込み内容を確認しました</h2>
-      <p>メール作成画面が開きます。内容をご確認のうえ、送信してください。</p>
-      <a id="mailtoLink" class="submit-link" href="#">メールを開く</a>
+      <h2 id="thanksTitle">Stripe決済ページへ移動します</h2>
+      <p id="thanksMessage">決済ページを開いています。自動で移動しない場合は、下のボタンからお進みください。</p>
+      <a id="checkoutLink" class="submit-link" href="#" rel="noopener">決済ページを開く</a>
     </div>
   </div>
 
   <footer class="site-footer">AIで考える、これからの私会議</footer>
-  <script src="./script.js"></script>
+  <script src="./script.js?v=stripe-checkout"></script>
 </body>
 </html>
