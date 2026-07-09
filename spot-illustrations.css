@@ -1,0 +1,54 @@
+/* =====================================================
+   Replacement spot illustrations
+   画像内の文字が重ならないよう、差し替えた小物イラストを
+   カード右下の飾りとして自然に見せる微調整です。
+   ===================================================== */
+
+.plan-card img,
+.support-card img {
+  mix-blend-mode: multiply;
+  opacity: .92;
+}
+
+.plan-card-1 img {
+  width: 50%;
+  right: 2px;
+  bottom: -2px;
+}
+
+.plan-card-2 img {
+  width: 57%;
+  right: -4px;
+  bottom: -4px;
+}
+
+.plan-card-3 img {
+  width: 49%;
+  right: 5px;
+  bottom: -2px;
+}
+
+.support-line img {
+  width: 34%;
+  right: 18px;
+  bottom: 8px;
+}
+
+.support-solo img {
+  width: 36%;
+  right: 20px;
+  bottom: 8px;
+}
+
+@media (max-width: 620px) {
+  .plan-card-1 img,
+  .plan-card-2 img,
+  .plan-card-3 img {
+    width: 45%;
+  }
+
+  .support-line img,
+  .support-solo img {
+    width: 34%;
+  }
+}
