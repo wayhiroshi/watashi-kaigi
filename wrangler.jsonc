@@ -12,7 +12,9 @@
   "vars": {
     "PUBLIC_SITE_URL": "https://watashi-kaigi.aether42.com",
     "ORGANIZER_EMAIL": "yoshiaki.toyota@gmail.com",
-    "RESEND_FROM": "Watashi Kaigi <watashi-kaigi@notify.aether42.com>"
+    "RESEND_FROM": "Watashi Kaigi <watashi-kaigi@notify.aether42.com>",
+    "TEAM_DOMAIN": "https://little-pine-c95a.cloudflareaccess.com",
+    "POLICY_AUD": "fefc3ed9bf42f3ef7d0368756887b68df14cd29200adf0a29425f15344ed2524"
   },
   "d1_databases": [
     {
@@ -29,7 +31,8 @@
     "directory": ".",
     "binding": "ASSETS",
     "run_worker_first": [
-      "/api/*"
+      "/api/*",
+      "/admin/*"
     ]
   },
   "compatibility_flags": [

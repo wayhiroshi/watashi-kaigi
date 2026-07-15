@@ -1,3 +1,5 @@
+import { createRemoteJWKSet, jwtVerify } from "jose";
+
 const STRIPE_API_VERSION = "2026-06-24.dahlia";
 const STRIPE_CHECKOUT_URL = "https://api.stripe.com/v1/checkout/sessions";
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
@@ -13,6 +15,14 @@ function jsonResponse(body, status = 200) {
       "cache-control": "no-store",
     },
   });
+}
+
+function adminJsonResponse(body, status = 200) {
+  const response = jsonResponse(body, status);
+  response.headers.set("x-content-type-options", "nosniff");
+  response.headers.set("referrer-policy", "no-referrer");
+  response.headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
+  return response;
 }
 
 function asString(value) {
@@ -519,9 +529,130 @@ export async function sendOrganizerNotification(
   return { sent: true, messageId: resendPayload.id };
 }
 
+export async function authenticateAdminRequest(request, env) {
+  if (env.ADMIN_LOCAL_BYPASS === "true") {
+    return { email: "local-admin" };
+  }
+
+  const teamDomain = asString(env.TEAM_DOMAIN).replace(/\/+$/, "");
+  const policyAudience = asString(env.POLICY_AUD);
+  const token = request.headers.get("cf-access-jwt-assertion") || "";
+
+  if (!teamDomain || !policyAudience || !token) return null;
+
+  try {
+    const jwks = createRemoteJWKSet(new URL(`${teamDomain}/cdn-cgi/access/certs`));
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: teamDomain,
+      audience: policyAudience,
+    });
+    const email = asString(payload.email);
+    return email ? { email } : null;
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "admin_access_token_invalid",
+      error: error instanceof Error ? error.message : "Unknown error",
+    }));
+    return null;
+  }
+}
+
+export async function getAdminRegistrations(env) {
+  if (!env.DB) throw new Error("D1 database binding is missing");
+
+  const [summary, registrations] = await Promise.all([
+    env.DB.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) AS paid,
+        SUM(CASE WHEN payment_status = 'failed' THEN 1 ELSE 0 END) AS failed,
+        SUM(CASE WHEN organizer_email_last_error IS NOT NULL THEN 1 ELSE 0 END) AS notification_errors
+      FROM registrations
+    `).first(),
+    env.DB.prepare(`
+      SELECT
+        order_id,
+        checkout_session_id,
+        payment_status,
+        amount_total,
+        currency,
+        participant_name,
+        participant_email,
+        participant_tel,
+        event_date,
+        ai_experience,
+        paid_at,
+        created_at,
+        organizer_email_sent_at,
+        organizer_email_message_id,
+        organizer_email_last_error
+      FROM registrations
+      ORDER BY created_at DESC
+      LIMIT 200
+    `).all(),
+  ]);
+
+  return {
+    summary: {
+      total: Number(summary?.total || 0),
+      paid: Number(summary?.paid || 0),
+      failed: Number(summary?.failed || 0),
+      notificationErrors: Number(summary?.notification_errors || 0),
+    },
+    registrations: registrations.results || [],
+  };
+}
+
+async function handleAdminRequest(request, env) {
+  const admin = await authenticateAdminRequest(request, env);
+  if (!admin) {
+    return adminJsonResponse({ error: "管理画面へのアクセス権限を確認できません。" }, 403);
+  }
+
+  const url = new URL(request.url);
+  if (url.pathname === "/admin/api/registrations") {
+    if (request.method !== "GET") {
+      return adminJsonResponse({ error: "この操作にはGETリクエストが必要です。" }, 405);
+    }
+
+    const data = await getAdminRegistrations(env);
+    return adminJsonResponse({
+      ...data,
+      viewer: admin.email,
+      generatedAt: new Date().toISOString(),
+    });
+  }
+
+  if (url.pathname.startsWith("/admin/api/")) {
+    return adminJsonResponse({ error: "管理APIが見つかりません。" }, 404);
+  }
+
+  const assetResponse = await env.ASSETS.fetch(request);
+  const response = new Response(assetResponse.body, assetResponse);
+  response.headers.set("cache-control", "private, no-store");
+  response.headers.set("content-security-policy", "default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  response.headers.set("x-content-type-options", "nosniff");
+  response.headers.set("referrer-policy", "no-referrer");
+  response.headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
+  return response;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/admin") {
+      return Response.redirect(`${url.origin}/admin/`, 302);
+    }
+
+    if (url.pathname.startsWith("/admin/")) {
+      try {
+        return await handleAdminRequest(request, env);
+      } catch (error) {
+        console.error(JSON.stringify({ event: "admin_request_error", error: error.message }));
+        return adminJsonResponse({ error: "管理データを取得できませんでした。" }, 500);
+      }
+    }
 
     if (url.pathname === "/api/stripe-webhook") {
       if (request.method !== "POST") {
