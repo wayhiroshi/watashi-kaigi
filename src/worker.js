@@ -2,6 +2,7 @@ const STRIPE_API_VERSION = "2026-06-24.dahlia";
 const STRIPE_CHECKOUT_URL = "https://api.stripe.com/v1/checkout/sessions";
 const EVENT_NAME = "AIで考える、これからの私会議 参加費";
 const EVENT_PRICE_JPY = 3000;
+const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 300;
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -19,6 +20,66 @@ function asString(value) {
 
 function truncateMetadata(value, maxLength = 500) {
   return asString(value).slice(0, maxLength);
+}
+
+function hexToBytes(hex) {
+  if (!/^[0-9a-f]+$/i.test(hex) || hex.length % 2 !== 0) return null;
+
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+function parseStripeSignature(header) {
+  const values = { timestamp: "", signatures: [] };
+
+  asString(header).split(",").forEach((part) => {
+    const [key, value] = part.trim().split("=", 2);
+    if (key === "t") values.timestamp = value || "";
+    if (key === "v1" && value) values.signatures.push(value);
+  });
+
+  return values;
+}
+
+export async function verifyStripeSignature(
+  payload,
+  signatureHeader,
+  secret,
+  nowSeconds = Math.floor(Date.now() / 1000),
+) {
+  const { timestamp, signatures } = parseStripeSignature(signatureHeader);
+  const timestampNumber = Number(timestamp);
+
+  if (!timestamp || !Number.isFinite(timestampNumber) || signatures.length === 0) {
+    return false;
+  }
+  if (Math.abs(nowSeconds - timestampNumber) > STRIPE_SIGNATURE_TOLERANCE_SECONDS) {
+    return false;
+  }
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  const signedPayload = encoder.encode(`${timestamp}.${payload}`);
+
+  for (const signature of signatures) {
+    const signatureBytes = hexToBytes(signature);
+    if (!signatureBytes) continue;
+
+    if (await crypto.subtle.verify("HMAC", key, signatureBytes, signedPayload)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function getBaseUrl(request, env) {
@@ -151,9 +212,80 @@ async function createCheckoutSession(request, env) {
   return jsonResponse({ url: stripePayload.url, orderId });
 }
 
+export async function handleStripeWebhook(request, env) {
+  if (!env.STRIPE_WEBHOOK_SECRET) {
+    console.error(JSON.stringify({ event: "stripe_webhook_secret_missing" }));
+    return jsonResponse({ error: "Webhook設定を確認できません。" }, 500);
+  }
+
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (contentLength > 1000000) {
+    return jsonResponse({ error: "Webhookの内容が大きすぎます。" }, 413);
+  }
+
+  const payload = await request.text();
+  const signature = request.headers.get("stripe-signature") || "";
+  const isValid = await verifyStripeSignature(
+    payload,
+    signature,
+    env.STRIPE_WEBHOOK_SECRET,
+  );
+
+  if (!isValid) {
+    console.warn(JSON.stringify({ event: "stripe_webhook_signature_invalid" }));
+    return jsonResponse({ error: "Webhook署名を確認できません。" }, 400);
+  }
+
+  let stripeEvent;
+  try {
+    stripeEvent = JSON.parse(payload);
+  } catch {
+    return jsonResponse({ error: "WebhookのJSONを確認できません。" }, 400);
+  }
+
+  const session = stripeEvent.data?.object || {};
+  const logPayload = {
+    event: "stripe_webhook_received",
+    stripe_event_id: stripeEvent.id,
+    stripe_event_type: stripeEvent.type,
+    checkout_session_id: session.id,
+    payment_status: session.payment_status,
+    order_id: session.client_reference_id || session.metadata?.order_id,
+    customer_email: session.customer_details?.email || session.customer_email,
+    participant_name: session.metadata?.name,
+    event_date: session.metadata?.date,
+  };
+
+  if (
+    stripeEvent.type === "checkout.session.completed"
+    || stripeEvent.type === "checkout.session.async_payment_succeeded"
+  ) {
+    console.log(JSON.stringify({ ...logPayload, event: "stripe_checkout_paid" }));
+  } else if (stripeEvent.type === "checkout.session.async_payment_failed") {
+    console.warn(JSON.stringify({ ...logPayload, event: "stripe_checkout_payment_failed" }));
+  } else {
+    console.log(JSON.stringify(logPayload));
+  }
+
+  return jsonResponse({ received: true });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/api/stripe-webhook") {
+      if (request.method !== "POST") {
+        return jsonResponse({ error: "この操作にはPOSTリクエストが必要です。" }, 405);
+      }
+
+      try {
+        return await handleStripeWebhook(request, env);
+      } catch (error) {
+        console.error(JSON.stringify({ event: "stripe_webhook_error", error: error.message }));
+        return jsonResponse({ error: "Webhookの処理中に問題が発生しました。" }, 500);
+      }
+    }
 
     if (url.pathname === "/api/create-checkout-session") {
       if (request.method !== "POST") {

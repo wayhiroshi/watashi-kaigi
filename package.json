@@ -9,10 +9,12 @@
     "deploy": "XDG_CONFIG_HOME=.wrangler/config wrangler deploy",
     "deploy:dry-run": "XDG_CONFIG_HOME=.wrangler/config wrangler deploy --dry-run",
     "check:js": "node --check script.js && node --check src/worker.js",
-    "verify": "npm run check:js && npm run deploy:dry-run",
+    "test:webhook": "node --test tests/webhook.test.mjs",
+    "verify": "npm run check:js && npm run test:webhook && npm run deploy:dry-run",
     "git:status": "git status --short --branch",
     "git:publish": "scripts/git-publish.sh",
-    "secret:stripe": "XDG_CONFIG_HOME=.wrangler/config wrangler secret put STRIPE_SECRET_KEY"
+    "secret:stripe": "XDG_CONFIG_HOME=.wrangler/config wrangler secret put STRIPE_SECRET_KEY",
+    "secret:stripe-webhook": "XDG_CONFIG_HOME=.wrangler/config wrangler secret put STRIPE_WEBHOOK_SECRET"
   },
   "devDependencies": {
     "wrangler": "^4.106.0"

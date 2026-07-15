@@ -23,4 +23,8 @@ scripts/**
 src
 src/
 src/**
+tests
+tests/
+tests/**
+README_SPOT_ILLUSTRATIONS.md
 wrangler.jsonc
