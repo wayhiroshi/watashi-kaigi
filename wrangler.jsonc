@@ -12,6 +12,14 @@
   "vars": {
     "PUBLIC_SITE_URL": "https://watashi-kaigi.aether42.com"
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "watashi-kaigi-db",
+      "database_id": "83cb56c8-d232-4f0e-b2d3-514809e42aaa",
+      "migrations_dir": "migrations"
+    }
+  ],
   "observability": {
     "enabled": true
   },

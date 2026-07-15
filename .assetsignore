@@ -23,6 +23,9 @@ scripts/**
 src
 src/
 src/**
+migrations
+migrations/
+migrations/**
 tests
 tests/
 tests/**

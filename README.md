@@ -45,6 +45,19 @@ https://watashi-kaigi.aether42.com/api/stripe-webhook
 
 受信イベントは `checkout.session.completed`、`checkout.session.async_payment_succeeded`、`checkout.session.async_payment_failed` です。WebhookはStripe署名を検証し、決済結果と申込メタデータをCloudflareの構造化ログへ記録します。
 
+決済結果と申込情報はCloudflare D1の `registrations` テーブルにも保存します。初回デプロイ前にマイグレーションを適用します。
+
+```sh
+npm run db:migrate:local
+npm run db:migrate:remote
+```
+
+本番の申込者一覧は次のコマンドで確認できます。
+
+```sh
+npm run db:registrations
+```
+
 本番ドメインを明示したい場合は、Cloudflareの環境変数 `PUBLIC_SITE_URL` に公開URLを設定します。未設定の場合は、アクセスされたURLをもとに決済完了後の戻り先を作ります。
 
 ## 公開URL

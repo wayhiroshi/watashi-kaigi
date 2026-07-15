@@ -244,6 +244,16 @@ export async function handleStripeWebhook(request, env) {
   }
 
   const session = stripeEvent.data?.object || {};
+  const isCheckoutEvent = [
+    "checkout.session.completed",
+    "checkout.session.async_payment_succeeded",
+    "checkout.session.async_payment_failed",
+  ].includes(stripeEvent.type);
+
+  if (isCheckoutEvent) {
+    await saveRegistration(env, stripeEvent, session);
+  }
+
   const logPayload = {
     event: "stripe_webhook_received",
     stripe_event_id: stripeEvent.id,
@@ -268,6 +278,85 @@ export async function handleStripeWebhook(request, env) {
   }
 
   return jsonResponse({ received: true });
+}
+
+export async function saveRegistration(env, stripeEvent, session) {
+  if (!env.DB) {
+    throw new Error("D1 database binding is missing");
+  }
+
+  const metadata = session.metadata || {};
+  const orderId = asString(session.client_reference_id || metadata.order_id);
+  const checkoutSessionId = asString(session.id);
+  const participantEmail = asString(
+    session.customer_details?.email || session.customer_email || metadata.email,
+  );
+  const participantName = asString(metadata.name || session.customer_details?.name);
+
+  if (!stripeEvent.id || !orderId || !checkoutSessionId || !participantEmail) {
+    throw new Error("Stripe Checkout event is missing registration fields");
+  }
+
+  const paymentStatus = stripeEvent.type === "checkout.session.async_payment_failed"
+    ? "failed"
+    : asString(session.payment_status) || "unknown";
+  const paidAt = paymentStatus === "paid"
+    ? new Date((stripeEvent.created || Math.floor(Date.now() / 1000)) * 1000).toISOString()
+    : null;
+
+  await env.DB.batch([
+    env.DB.prepare(`
+      INSERT OR IGNORE INTO stripe_events (
+        stripe_event_id,
+        event_type,
+        checkout_session_id
+      ) VALUES (?, ?, ?)
+    `).bind(stripeEvent.id, stripeEvent.type, checkoutSessionId),
+    env.DB.prepare(`
+      INSERT INTO registrations (
+        order_id,
+        checkout_session_id,
+        payment_intent_id,
+        latest_stripe_event_id,
+        payment_status,
+        amount_total,
+        currency,
+        participant_name,
+        participant_email,
+        participant_tel,
+        event_date,
+        ai_experience,
+        paid_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(checkout_session_id) DO UPDATE SET
+        payment_intent_id = excluded.payment_intent_id,
+        latest_stripe_event_id = excluded.latest_stripe_event_id,
+        payment_status = excluded.payment_status,
+        amount_total = excluded.amount_total,
+        currency = excluded.currency,
+        participant_name = excluded.participant_name,
+        participant_email = excluded.participant_email,
+        participant_tel = excluded.participant_tel,
+        event_date = excluded.event_date,
+        ai_experience = excluded.ai_experience,
+        paid_at = COALESCE(excluded.paid_at, registrations.paid_at),
+        updated_at = CURRENT_TIMESTAMP
+    `).bind(
+      orderId,
+      checkoutSessionId,
+      asString(session.payment_intent) || null,
+      stripeEvent.id,
+      paymentStatus,
+      Number.isInteger(session.amount_total) ? session.amount_total : null,
+      asString(session.currency) || null,
+      participantName || "未入力",
+      participantEmail,
+      asString(metadata.tel) || null,
+      asString(metadata.date) || null,
+      asString(metadata.ai_experience) || null,
+      paidAt,
+    ),
+  ]);
 }
 
 export default {
