@@ -38,6 +38,11 @@ npm run secret:stripe
 
 本番ドメインを明示したい場合は、Cloudflareの環境変数 `PUBLIC_SITE_URL` に公開URLを設定します。未設定の場合は、アクセスされたURLをもとに決済完了後の戻り先を作ります。
 
+## 公開URL
+
+- `https://watashi-kaigi.aether42.com`
+- `wrangler.jsonc` のCustom Domain設定により、CloudflareがDNSレコードとTLS証明書を管理します。
+
 ## よく使うコマンド
 
 ```sh
