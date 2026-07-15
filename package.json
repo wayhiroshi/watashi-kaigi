@@ -15,9 +15,10 @@
     "git:publish": "scripts/git-publish.sh",
     "secret:stripe": "XDG_CONFIG_HOME=.wrangler/config wrangler secret put STRIPE_SECRET_KEY",
     "secret:stripe-webhook": "XDG_CONFIG_HOME=.wrangler/config wrangler secret put STRIPE_WEBHOOK_SECRET",
+    "secret:resend": "XDG_CONFIG_HOME=.wrangler/config wrangler secret put RESEND_API_KEY",
     "db:migrate:local": "XDG_CONFIG_HOME=.wrangler/config wrangler d1 migrations apply watashi-kaigi-db --local",
     "db:migrate:remote": "XDG_CONFIG_HOME=.wrangler/config wrangler d1 migrations apply watashi-kaigi-db --remote",
-    "db:registrations": "XDG_CONFIG_HOME=.wrangler/config wrangler d1 execute watashi-kaigi-db --remote --command=\"SELECT order_id, participant_name, participant_email, participant_tel, event_date, ai_experience, payment_status, amount_total, currency, paid_at FROM registrations ORDER BY created_at DESC\""
+    "db:registrations": "XDG_CONFIG_HOME=.wrangler/config wrangler d1 execute watashi-kaigi-db --remote --command=\"SELECT order_id, participant_name, participant_email, participant_tel, event_date, ai_experience, payment_status, amount_total, currency, paid_at, organizer_email_sent_at, organizer_email_message_id, organizer_email_last_error FROM registrations ORDER BY created_at DESC\""
   },
   "devDependencies": {
     "wrangler": "^4.106.0"

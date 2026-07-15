@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 
-import worker, { saveRegistration, verifyStripeSignature } from "../src/worker.js";
+import worker, {
+  saveRegistration,
+  sendOrganizerNotification,
+  verifyStripeSignature,
+} from "../src/worker.js";
 
 const secret = "whsec_test_secret";
 const timestamp = 1_750_000_000;
@@ -33,12 +37,38 @@ const payload = JSON.stringify(event);
 
 function createFakeDb() {
   const statements = [];
+  const emailState = {
+    organizer_email_sent_at: null,
+    organizer_email_message_id: null,
+    organizer_email_last_error: null,
+  };
   return {
+    emailState,
     statements,
     prepare(sql) {
       return {
         bind(...values) {
-          return { sql, values };
+          return {
+            sql,
+            values,
+            async first() {
+              if (sql.includes("SELECT organizer_email_sent_at")) {
+                return { organizer_email_sent_at: emailState.organizer_email_sent_at };
+              }
+              return null;
+            },
+            async run() {
+              statements.push({ sql, values });
+              if (sql.includes("organizer_email_sent_at = ?")) {
+                emailState.organizer_email_sent_at = values[0];
+                emailState.organizer_email_message_id = values[1];
+                emailState.organizer_email_last_error = null;
+              } else if (sql.includes("organizer_email_last_error = ?")) {
+                emailState.organizer_email_last_error = values[0];
+              }
+              return { success: true, meta: { changes: 1 } };
+            },
+          };
         },
       };
     },
@@ -86,13 +116,16 @@ test("rejects invalid and stale Stripe signatures", async () => {
 
 test("webhook route accepts signed Checkout events", async () => {
   const currentTimestamp = Math.floor(Date.now() / 1000);
+  const unpaidEvent = structuredClone(event);
+  unpaidEvent.data.object.payment_status = "unpaid";
+  const unpaidPayload = JSON.stringify(unpaidEvent);
   const request = new Request("https://example.com/api/stripe-webhook", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "stripe-signature": signatureHeader(payload, currentTimestamp),
+      "stripe-signature": signatureHeader(unpaidPayload, currentTimestamp),
     },
-    body: payload,
+    body: unpaidPayload,
   });
   const db = createFakeDb();
   const response = await worker.fetch(request, {
@@ -155,4 +188,73 @@ test("marks an asynchronous payment failure without a paid timestamp", async () 
 
   assert.equal(db.statements[1].values[4], "failed");
   assert.equal(db.statements[1].values[12], null);
+});
+
+test("sends one organizer email and records the Resend message ID", async () => {
+  const db = createFakeDb();
+  const requests = [];
+  const fakeFetch = async (url, options) => {
+    requests.push({ url, options });
+    return new Response(JSON.stringify({ id: "email_test_123" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const env = {
+    DB: db,
+    RESEND_API_KEY: "re_test",
+    ORGANIZER_EMAIL: "organizer@example.com",
+    RESEND_FROM: "Watashi Kaigi <watashi-kaigi@notify.aether42.com>",
+  };
+
+  const firstResult = await sendOrganizerNotification(
+    env,
+    event,
+    event.data.object,
+    fakeFetch,
+  );
+  const secondResult = await sendOrganizerNotification(
+    env,
+    event,
+    event.data.object,
+    fakeFetch,
+  );
+
+  assert.deepEqual(firstResult, { sent: true, messageId: "email_test_123" });
+  assert.deepEqual(secondResult, { sent: false, reason: "already_sent" });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://api.resend.com/emails");
+  assert.equal(
+    requests[0].options.headers["idempotency-key"],
+    "watashi-kaigi/payment-paid/cs_test_webhook",
+  );
+
+  const email = JSON.parse(requests[0].options.body);
+  assert.deepEqual(email.to, ["organizer@example.com"]);
+  assert.equal(email.reply_to, "participant@example.com");
+  assert.match(email.subject, /Test Participant/);
+  assert.match(email.text, /090-0000-0000/);
+  assert.equal(db.emailState.organizer_email_message_id, "email_test_123");
+  assert.ok(db.emailState.organizer_email_sent_at);
+});
+
+test("records a Resend error so Stripe can retry the webhook", async () => {
+  const db = createFakeDb();
+  const fakeFetch = async () => new Response(
+    JSON.stringify({ message: "Domain is not verified" }),
+    { status: 403, headers: { "content-type": "application/json" } },
+  );
+  const env = {
+    DB: db,
+    RESEND_API_KEY: "re_test",
+    ORGANIZER_EMAIL: "organizer@example.com",
+    RESEND_FROM: "Watashi Kaigi <watashi-kaigi@notify.aether42.com>",
+  };
+
+  await assert.rejects(
+    sendOrganizerNotification(env, event, event.data.object, fakeFetch),
+    /Organizer notification failed/,
+  );
+  assert.equal(db.emailState.organizer_email_last_error, "Domain is not verified");
+  assert.equal(db.emailState.organizer_email_sent_at, null);
 });

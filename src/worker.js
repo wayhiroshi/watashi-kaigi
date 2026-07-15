@@ -1,5 +1,6 @@
 const STRIPE_API_VERSION = "2026-06-24.dahlia";
 const STRIPE_CHECKOUT_URL = "https://api.stripe.com/v1/checkout/sessions";
+const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 const EVENT_NAME = "AIで考える、これからの私会議 参加費";
 const EVENT_PRICE_JPY = 3000;
 const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 300;
@@ -20,6 +21,23 @@ function asString(value) {
 
 function truncateMetadata(value, maxLength = 500) {
   return asString(value).slice(0, maxLength);
+}
+
+function escapeHtml(value) {
+  return asString(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatAmount(amount, currency) {
+  if (!Number.isInteger(amount)) return "不明";
+  if (asString(currency).toLowerCase() === "jpy") {
+    return `${amount.toLocaleString("ja-JP")}円`;
+  }
+  return `${amount} ${asString(currency).toUpperCase()}`.trim();
 }
 
 function hexToBytes(hex) {
@@ -252,6 +270,16 @@ export async function handleStripeWebhook(request, env) {
 
   if (isCheckoutEvent) {
     await saveRegistration(env, stripeEvent, session);
+
+    if (
+      stripeEvent.type === "checkout.session.async_payment_succeeded"
+      || (
+        stripeEvent.type === "checkout.session.completed"
+        && session.payment_status === "paid"
+      )
+    ) {
+      await sendOrganizerNotification(env, stripeEvent, session);
+    }
   }
 
   const logPayload = {
@@ -267,8 +295,11 @@ export async function handleStripeWebhook(request, env) {
   };
 
   if (
-    stripeEvent.type === "checkout.session.completed"
-    || stripeEvent.type === "checkout.session.async_payment_succeeded"
+    stripeEvent.type === "checkout.session.async_payment_succeeded"
+    || (
+      stripeEvent.type === "checkout.session.completed"
+      && session.payment_status === "paid"
+    )
   ) {
     console.log(JSON.stringify({ ...logPayload, event: "stripe_checkout_paid" }));
   } else if (stripeEvent.type === "checkout.session.async_payment_failed") {
@@ -357,6 +388,135 @@ export async function saveRegistration(env, stripeEvent, session) {
       paidAt,
     ),
   ]);
+}
+
+export async function sendOrganizerNotification(
+  env,
+  stripeEvent,
+  session,
+  fetchImpl = fetch,
+) {
+  if (!env.DB) throw new Error("D1 database binding is missing");
+  if (!env.RESEND_API_KEY) throw new Error("Resend API key is missing");
+
+  const organizerEmail = asString(env.ORGANIZER_EMAIL);
+  const from = asString(env.RESEND_FROM);
+  if (!organizerEmail || !from) {
+    throw new Error("Organizer email configuration is missing");
+  }
+
+  const metadata = session.metadata || {};
+  const checkoutSessionId = asString(session.id);
+  const orderId = asString(session.client_reference_id || metadata.order_id);
+  const participantName = asString(metadata.name || session.customer_details?.name) || "未入力";
+  const participantEmail = asString(
+    session.customer_details?.email || session.customer_email || metadata.email,
+  );
+  const participantTel = asString(metadata.tel) || "未入力";
+  const eventDate = asString(metadata.date) || "未選択";
+  const aiExperience = asString(metadata.ai_experience) || "未選択";
+  const paymentIntentId = asString(session.payment_intent) || "未取得";
+  const amount = formatAmount(session.amount_total, session.currency);
+
+  if (!checkoutSessionId || !orderId || !participantEmail) {
+    throw new Error("Stripe Checkout event is missing notification fields");
+  }
+
+  const existing = await env.DB.prepare(`
+    SELECT organizer_email_sent_at
+    FROM registrations
+    WHERE checkout_session_id = ?
+  `).bind(checkoutSessionId).first();
+
+  if (existing?.organizer_email_sent_at) {
+    return { sent: false, reason: "already_sent" };
+  }
+
+  const subject = `【私会議】決済完了: ${participantName}様（${eventDate}）`;
+  const text = [
+    "私会議への申し込みと決済が完了しました。",
+    "",
+    `お名前: ${participantName}`,
+    `メール: ${participantEmail}`,
+    `電話番号: ${participantTel}`,
+    `参加希望日: ${eventDate}`,
+    `AI利用経験: ${aiExperience}`,
+    `決済金額: ${amount}`,
+    `決済状態: ${asString(session.payment_status) || "paid"}`,
+    `注文ID: ${orderId}`,
+    `Checkout Session: ${checkoutSessionId}`,
+    `Payment Intent: ${paymentIntentId}`,
+    `Stripe Event: ${asString(stripeEvent.id)}`,
+  ].join("\n");
+  const html = `
+    <h1 style="font-size:20px">私会議への決済が完了しました</h1>
+    <table style="border-collapse:collapse">
+      <tbody>
+        <tr><th style="padding:6px 12px 6px 0;text-align:left">お名前</th><td>${escapeHtml(participantName)}</td></tr>
+        <tr><th style="padding:6px 12px 6px 0;text-align:left">メール</th><td>${escapeHtml(participantEmail)}</td></tr>
+        <tr><th style="padding:6px 12px 6px 0;text-align:left">電話番号</th><td>${escapeHtml(participantTel)}</td></tr>
+        <tr><th style="padding:6px 12px 6px 0;text-align:left">参加希望日</th><td>${escapeHtml(eventDate)}</td></tr>
+        <tr><th style="padding:6px 12px 6px 0;text-align:left">AI利用経験</th><td>${escapeHtml(aiExperience)}</td></tr>
+        <tr><th style="padding:6px 12px 6px 0;text-align:left">決済金額</th><td>${escapeHtml(amount)}</td></tr>
+        <tr><th style="padding:6px 12px 6px 0;text-align:left">注文ID</th><td>${escapeHtml(orderId)}</td></tr>
+        <tr><th style="padding:6px 12px 6px 0;text-align:left">Checkout Session</th><td>${escapeHtml(checkoutSessionId)}</td></tr>
+        <tr><th style="padding:6px 12px 6px 0;text-align:left">Payment Intent</th><td>${escapeHtml(paymentIntentId)}</td></tr>
+      </tbody>
+    </table>
+  `;
+
+  const resendResponse = await fetchImpl(RESEND_EMAILS_URL, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "content-type": "application/json",
+      "idempotency-key": `watashi-kaigi/payment-paid/${checkoutSessionId}`,
+    },
+    body: JSON.stringify({
+      from,
+      to: [organizerEmail],
+      reply_to: participantEmail,
+      subject,
+      text,
+      html,
+    }),
+  });
+
+  let resendPayload;
+  try {
+    resendPayload = await resendResponse.json();
+  } catch {
+    resendPayload = {};
+  }
+
+  if (!resendResponse.ok || !resendPayload.id) {
+    const errorMessage = asString(resendPayload.message) || `HTTP ${resendResponse.status}`;
+    await env.DB.prepare(`
+      UPDATE registrations
+      SET organizer_email_last_error = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE checkout_session_id = ?
+    `).bind(errorMessage.slice(0, 500), checkoutSessionId).run();
+    throw new Error(`Organizer notification failed: ${errorMessage}`);
+  }
+
+  const sentAt = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE registrations
+    SET
+      organizer_email_sent_at = ?,
+      organizer_email_message_id = ?,
+      organizer_email_last_error = NULL,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE checkout_session_id = ?
+  `).bind(sentAt, resendPayload.id, checkoutSessionId).run();
+
+  console.log(JSON.stringify({
+    event: "organizer_notification_sent",
+    checkout_session_id: checkoutSessionId,
+    resend_message_id: resendPayload.id,
+  }));
+
+  return { sent: true, messageId: resendPayload.id };
 }
 
 export default {

@@ -10,7 +10,9 @@
     }
   ],
   "vars": {
-    "PUBLIC_SITE_URL": "https://watashi-kaigi.aether42.com"
+    "PUBLIC_SITE_URL": "https://watashi-kaigi.aether42.com",
+    "ORGANIZER_EMAIL": "yoshiaki.toyota@gmail.com",
+    "RESEND_FROM": "Watashi Kaigi <watashi-kaigi@notify.aether42.com>"
   },
   "d1_databases": [
     {
