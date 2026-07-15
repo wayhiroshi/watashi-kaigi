@@ -1,7 +1,7 @@
 const STRIPE_API_VERSION = "2026-06-24.dahlia";
 const STRIPE_CHECKOUT_URL = "https://api.stripe.com/v1/checkout/sessions";
 const EVENT_NAME = "AIで考える、これからの私会議 参加費";
-const EVENT_PRICE_JPY = 2000;
+const EVENT_PRICE_JPY = 3000;
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
