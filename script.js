@@ -4,8 +4,11 @@ const modalTitle = document.getElementById("thanksTitle");
 const modalMessage = document.getElementById("thanksMessage");
 const checkoutLink = document.getElementById("checkoutLink");
 const submitButton = form.querySelector('button[type="submit"]');
+const seatStatus = document.getElementById("seat-status");
 const CHECKOUT_ENDPOINT = "/api/create-checkout-session";
+const EVENT_STATUS_ENDPOINT = "/api/event-status";
 const DEFAULT_BUTTON_TEXT = submitButton.textContent;
+let isSoldOut = false;
 
 function setError(name, message) {
   const target = document.querySelector(`[data-error-for="${name}"]`);
@@ -27,27 +30,53 @@ function closeModal() {
   modal.setAttribute("aria-hidden", "true");
 }
 function setSubmitting(isSubmitting) {
-  submitButton.disabled = isSubmitting;
-  submitButton.textContent = isSubmitting ? "決済ページを準備しています..." : DEFAULT_BUTTON_TEXT;
+  submitButton.disabled = isSubmitting || isSoldOut;
+  submitButton.textContent = isSubmitting
+    ? "決済ページを準備しています..."
+    : isSoldOut ? "満席になりました" : DEFAULT_BUTTON_TEXT;
 }
 function getPayload(data) {
   return {
     name: String(data.get("name") || "").trim(),
     email: String(data.get("email") || "").trim(),
     tel: String(data.get("tel") || "").trim(),
-    date: String(data.get("date") || "").trim(),
+    eventId: String(data.get("eventId") || "").trim(),
     aiExperience: String(data.get("aiExperience") || "").trim(),
     agree: data.get("agree") === "on",
   };
 }
+
+function renderEventStatus(status) {
+  isSoldOut = Boolean(status.soldOut);
+  seatStatus.classList.toggle("is-sold-out", isSoldOut);
+  seatStatus.textContent = isSoldOut
+    ? "満席になりました。次回開催をご案内できるまでお待ちください。"
+    : `現在、残り${status.remaining}席です。決済ページを開くと35分間お席を確保します。`;
+  setSubmitting(false);
+}
+
+async function loadEventStatus() {
+  try {
+    const response = await fetch(EVENT_STATUS_ENDPOINT, {
+      headers: { accept: "application/json" },
+    });
+    const status = await response.json();
+    if (!response.ok) throw new Error(status.error);
+    renderEventStatus(status);
+  } catch {
+    seatStatus.textContent = "空席状況を表示できません。申込時に最新状況を確認します。";
+  }
+}
+
 document.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", closeModal));
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
+loadEventStatus();
 
 const paymentStatus = new URLSearchParams(window.location.search).get("payment");
 if (paymentStatus === "success") {
   openModal({
     title: "決済を受け付けました",
-    message: "Stripeから決済確認メールが届きます。開催詳細は主催者よりあらためてご連絡します。",
+    message: "決済を確認後、開催日時と会場詳細を記載したメールが自動で届きます。受信箱をご確認ください。",
     href: "#entry",
     linkText: "申し込み欄に戻る",
   });
@@ -83,6 +112,7 @@ form.addEventListener("submit", async (event) => {
 
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.url) {
+      if (result.soldOut) renderEventStatus({ soldOut: true, remaining: 0 });
       throw new Error(result.error || "決済ページを準備できませんでした。");
     }
 

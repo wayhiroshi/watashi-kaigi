@@ -5,6 +5,7 @@ import test from "node:test";
 import worker, {
   saveRegistration,
   sendOrganizerNotification,
+  sendParticipantConfirmation,
   verifyStripeSignature,
 } from "../src/worker.js";
 
@@ -24,6 +25,7 @@ const event = {
       client_reference_id: "order-test",
       customer_details: { email: "participant@example.com" },
       metadata: {
+        event_id: "2026-08-30-kobe",
         name: "Test Participant",
         email: "participant@example.com",
         tel: "090-0000-0000",
@@ -41,6 +43,9 @@ function createFakeDb() {
     organizer_email_sent_at: null,
     organizer_email_message_id: null,
     organizer_email_last_error: null,
+    participant_email_sent_at: null,
+    participant_email_message_id: null,
+    participant_email_last_error: null,
   };
   return {
     emailState,
@@ -55,6 +60,9 @@ function createFakeDb() {
               if (sql.includes("SELECT organizer_email_sent_at")) {
                 return { organizer_email_sent_at: emailState.organizer_email_sent_at };
               }
+              if (sql.includes("SELECT participant_email_sent_at")) {
+                return { participant_email_sent_at: emailState.participant_email_sent_at };
+              }
               return null;
             },
             async run() {
@@ -65,6 +73,12 @@ function createFakeDb() {
                 emailState.organizer_email_last_error = null;
               } else if (sql.includes("organizer_email_last_error = ?")) {
                 emailState.organizer_email_last_error = values[0];
+              } else if (sql.includes("participant_email_sent_at = ?")) {
+                emailState.participant_email_sent_at = values[0];
+                emailState.participant_email_message_id = values[1];
+                emailState.participant_email_last_error = null;
+              } else if (sql.includes("participant_email_last_error = ?")) {
+                emailState.participant_email_last_error = values[0];
               }
               return { success: true, meta: { changes: 1 } };
             },
@@ -165,15 +179,16 @@ test("stores the Checkout registration with payment metadata", async () => {
 
   const registrationValues = db.statements[1].values;
   assert.equal(registrationValues[0], "order-test");
-  assert.equal(registrationValues[1], "cs_test_webhook");
-  assert.equal(registrationValues[2], "pi_test_webhook");
-  assert.equal(registrationValues[4], "paid");
-  assert.equal(registrationValues[5], 3000);
-  assert.equal(registrationValues[6], "jpy");
-  assert.equal(registrationValues[7], "Test Participant");
-  assert.equal(registrationValues[8], "participant@example.com");
-  assert.equal(registrationValues[9], "090-0000-0000");
-  assert.equal(registrationValues[10], "第1回");
+  assert.equal(registrationValues[1], "2026-08-30-kobe");
+  assert.equal(registrationValues[2], "cs_test_webhook");
+  assert.equal(registrationValues[3], "pi_test_webhook");
+  assert.equal(registrationValues[5], "paid");
+  assert.equal(registrationValues[6], 3000);
+  assert.equal(registrationValues[7], "jpy");
+  assert.equal(registrationValues[8], "Test Participant");
+  assert.equal(registrationValues[9], "participant@example.com");
+  assert.equal(registrationValues[10], "090-0000-0000");
+  assert.equal(registrationValues[11], "第1回");
 });
 
 test("marks an asynchronous payment failure without a paid timestamp", async () => {
@@ -186,8 +201,8 @@ test("marks an asynchronous payment failure without a paid timestamp", async () 
 
   await saveRegistration({ DB: db }, failedEvent, failedEvent.data.object);
 
-  assert.equal(db.statements[1].values[4], "failed");
-  assert.equal(db.statements[1].values[12], null);
+  assert.equal(db.statements[1].values[5], "failed");
+  assert.equal(db.statements[1].values[13], null);
 });
 
 test("sends one organizer email and records the Resend message ID", async () => {
@@ -257,4 +272,53 @@ test("records a Resend error so Stripe can retry the webhook", async () => {
   );
   assert.equal(db.emailState.organizer_email_last_error, "Domain is not verified");
   assert.equal(db.emailState.organizer_email_sent_at, null);
+});
+
+test("sends one participant confirmation with venue and cancellation details", async () => {
+  const db = createFakeDb();
+  const requests = [];
+  const fakeFetch = async (url, options) => {
+    requests.push({ url, options });
+    return new Response(JSON.stringify({ id: "email_participant_123" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  const env = {
+    DB: db,
+    RESEND_API_KEY: "re_test",
+    ORGANIZER_EMAIL: "organizer@example.com",
+    RESEND_FROM: "Watashi Kaigi <watashi-kaigi@notify.aether42.com>",
+  };
+
+  const firstResult = await sendParticipantConfirmation(
+    env,
+    event,
+    event.data.object,
+    fakeFetch,
+  );
+  const secondResult = await sendParticipantConfirmation(
+    env,
+    event,
+    event.data.object,
+    fakeFetch,
+  );
+
+  assert.deepEqual(firstResult, { sent: true, messageId: "email_participant_123" });
+  assert.deepEqual(secondResult, { sent: false, reason: "already_sent" });
+  assert.equal(requests.length, 1);
+  assert.equal(
+    requests[0].options.headers["idempotency-key"],
+    "watashi-kaigi/participant-confirmation/cs_test_webhook",
+  );
+
+  const email = JSON.parse(requests[0].options.body);
+  assert.deepEqual(email.to, ["participant@example.com"]);
+  assert.equal(email.reply_to, "organizer@example.com");
+  assert.match(email.subject, /8月30日/);
+  assert.match(email.text, /U\.C神戸駅前BLDG\. 301号室/);
+  assert.match(email.text, /開催7日前まで：全額返金/);
+  assert.match(email.text, /エレベーターはありません/);
+  assert.ok(db.emailState.participant_email_sent_at);
+  assert.equal(db.emailState.participant_email_message_id, "email_participant_123");
 });

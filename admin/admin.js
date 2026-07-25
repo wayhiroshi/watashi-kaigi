@@ -69,14 +69,22 @@ function createRow(registration) {
   appendText(payment, "secondary", formatAmount(registration.amount_total, registration.currency));
 
   const notification = document.createElement("td");
-  if (registration.organizer_email_last_error) {
-    notification.append(createStatus("送信エラー", "error"));
-    appendText(notification, "secondary", registration.organizer_email_last_error);
-  } else if (registration.organizer_email_sent_at) {
-    notification.append(createStatus("送信済み", "sent"));
-    appendText(notification, "secondary", formatDate(registration.organizer_email_sent_at));
+  const notificationError = registration.participant_email_last_error
+    || registration.organizer_email_last_error;
+  if (notificationError) {
+    notification.append(createStatus("メールエラー", "error"));
+    appendText(notification, "secondary", notificationError);
+  } else if (registration.participant_email_sent_at) {
+    notification.append(createStatus("参加者へ送信済み", "sent"));
+    appendText(notification, "secondary", formatDate(registration.participant_email_sent_at));
+  } else if (registration.payment_status === "paid") {
+    notification.append(createStatus("参加者へ未送信", "pending"));
   } else {
-    notification.append(createStatus("未送信", "pending"));
+    notification.append(createStatus("決済待ち", "pending"));
+  }
+
+  if (registration.organizer_email_sent_at) {
+    appendText(notification, "secondary", `主催者通知 ${formatDate(registration.organizer_email_sent_at)}`);
   }
 
   const createdAt = document.createElement("td");

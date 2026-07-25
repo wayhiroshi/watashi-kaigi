@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Serif+JP:wght@600;700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./style.css?v=stripe-checkout">
+  <link rel="stylesheet" href="./style.css?v=20260830">
   <link rel="stylesheet" href="./mobile-hero.css">
 </head>
 <body>
@@ -121,7 +121,7 @@
         <article class="support-card support-line">
           <h3><span>❧</span>会が終わったあとも、ひとりにしません</h3>
           <ul>
-            <li>参加者限定LINEで、当日の内容やAIの使い方を質問できます</li>
+            <li>参加者向けのフォロー窓口で、当日の内容やAIの使い方を質問できます</li>
             <li>ご希望の方へ、次回のお茶会や少人数講座をご案内します</li>
             <li>無理な継続参加や、不要なご案内はありません。あなたのペースで、これからの自分を少しずつ整えていきましょう。</li>
           </ul>
@@ -147,9 +147,9 @@
           <p class="entry-lead">この会では、AIを難しい技術として学ぶのではなく、毎日の中で「自分の補助役」として使う第一歩をつくります。</p>
 
           <div class="entry-points">
-            <div><b>少人数でゆっくり</b><span>6〜8名程度の少人数。置いていかない進行です。</span></div>
+            <div><b>定員6名でゆっくり</b><span>少人数で、一人ひとりのペースに合わせて進めます。</span></div>
             <div><b>女性サポート役も同席</b><span>初めての方やお一人の参加でも安心です。</span></div>
-            <div><b>会の後もLINEで質問OK</b><span>家に帰ってからの「ここが分からない」にも対応します。</span></div>
+            <div><b>会の後も質問できます</b><span>家に帰ってからの「ここが分からない」にも対応します。</span></div>
           </div>
 
           <div class="privacy-box">
@@ -164,12 +164,20 @@
               <p>FIRST TIME WELCOME</p>
               <h3 id="apply-title">お申込みはこちら</h3>
             </div>
-            <span>初回限定 6名様</span>
+            <span>8月30日 定員6名</span>
           </div>
 
-          <p class="apply-intro">フォーム送信後、Stripeの安全な決済ページへ移動します。決済完了後、主催者よりご連絡します。</p>
+          <p class="apply-intro">フォーム送信後、Stripeの安全な決済ページへ移動します。決済完了後、会場詳細を記載した確認メールが自動で届きます。</p>
 
           <form id="entryForm" novalidate>
+            <input type="hidden" name="eventId" value="2026-08-30-kobe">
+            <div class="event-summary" aria-label="お申し込み対象の開催回">
+              <b>2026年8月30日（日）14:00〜15:30</b>
+              <span>受付13:30／マイスぺ24 神戸スペース／参加費3,000円</span>
+              <small>JR神戸駅中央口から徒歩3分。会場は3階で、エレベーターはありません。</small>
+            </div>
+            <p id="seat-status" class="seat-status" role="status">空席状況を確認しています...</p>
+
             <div class="form-row">
               <label for="name">お名前 <span>必須</span></label>
               <input id="name" type="text" name="name" placeholder="例）山田 花子" autocomplete="name" required>
@@ -188,15 +196,6 @@
             </div>
 
             <div class="form-row">
-              <label for="date">参加希望日</label>
-              <select id="date" name="date">
-                <option value="">選択してください</option>
-                <option>第1回（近日開催予定）</option>
-                <option>次回以降の案内を希望する</option>
-              </select>
-            </div>
-
-            <div class="form-row">
               <label for="aiExperience">AIの利用経験</label>
               <select id="aiExperience" name="aiExperience">
                 <option value="">選択してください</option>
@@ -208,7 +207,7 @@
 
             <label class="check">
               <input type="checkbox" name="agree" required>
-              <span>送信内容を確認し、主催者からの連絡を受け取ることと、Stripe決済ページへ進むことに同意します。</span>
+              <span>送信内容と下記のキャンセル条件を確認し、主催者からの連絡を受け取ることと、Stripe決済ページへ進むことに同意します。</span>
             </label>
             <p class="error-message" data-error-for="agree"></p>
             <p class="error-message form-status" data-error-for="form" role="alert"></p>
@@ -224,12 +223,25 @@
       <div class="container event-box">
         <div class="event-title"><span>❧</span>開催概要</div>
         <div class="event-items">
-          <div><b>◷ 時間</b><span>90分程度</span></div>
-          <div><b>♧ 形式</b><span>少人数（6〜8名程度）</span></div>
-          <div><b>⌖ 場所</b><span>マイスぺ24 神戸スペース<br>（お申し込み後にご案内します）</span></div>
+          <div><b>▣ 日時</b><span>2026年8月30日（日）<br>14:00〜15:30（受付13:30）</span></div>
+          <div><b>♧ 定員</b><span>6名</span></div>
+          <div><b>⌖ 場所</b><span>マイスぺ24 神戸スペース<br>JR神戸駅中央口から徒歩3分<br>（詳しい住所は決済後のメールでご案内）</span></div>
           <div><b>¥ 参加費</b><span>3,000円（お茶とお菓子付き）</span></div>
         </div>
-        <p>※スマホまたはノートパソコンをご持参ください。AI初心者の方も大歓迎です。</p>
+        <p>※スマホまたはノートパソコンと充電器をご持参ください。会場は3階で、エレベーターはありません。</p>
+        <div id="terms" class="terms-box">
+          <h3>キャンセルについて</h3>
+          <ul>
+            <li>開催7日前まで：全額返金</li>
+            <li>開催6日前以降：返金はありませんが、次回開催へ1回振替できます</li>
+            <li>当日の欠席・無連絡：返金・振替の対象外です</li>
+            <li>主催者都合で中止する場合：全額返金します</li>
+          </ul>
+        </div>
+        <div class="safety-box">
+          <h3>AIを安心して使うために</h3>
+          <p>住所、健康情報、勤務先の機密情報など、他人に見られて困る情報は入力しないでください。AIの回答は誤ることがあります。医療・法律など専門的な判断は、専門家へご相談ください。</p>
+        </div>
         <img class="footer-leaf" src="./assets/footer-leaf.png" alt="" aria-hidden="true">
       </div>
     </section>
@@ -253,6 +265,6 @@
       <a href="https://aether42.com/privacy-policy/">プライバシーポリシー</a>
     </nav>
   </footer>
-  <script src="./script.js?v=stripe-checkout"></script>
+  <script src="./script.js?v=20260830"></script>
 </body>
 </html>

@@ -10,8 +10,9 @@
     "deploy:dry-run": "XDG_CONFIG_HOME=.wrangler/config wrangler deploy --dry-run",
     "check:js": "node --check script.js && node --check src/worker.js",
     "test:webhook": "node --test tests/webhook.test.mjs",
+    "test:checkout": "node --test tests/checkout.test.mjs",
     "test:admin": "node --test tests/admin.test.mjs",
-    "verify": "npm run check:js && npm run test:webhook && npm run test:admin && npm run deploy:dry-run",
+    "verify": "npm run check:js && npm run test:webhook && npm run test:checkout && npm run test:admin && npm run deploy:dry-run",
     "git:status": "git status --short --branch",
     "git:publish": "scripts/git-publish.sh",
     "secret:stripe": "XDG_CONFIG_HOME=.wrangler/config wrangler secret put STRIPE_SECRET_KEY",
@@ -19,7 +20,7 @@
     "secret:resend": "XDG_CONFIG_HOME=.wrangler/config wrangler secret put RESEND_API_KEY",
     "db:migrate:local": "XDG_CONFIG_HOME=.wrangler/config wrangler d1 migrations apply watashi-kaigi-db --local",
     "db:migrate:remote": "XDG_CONFIG_HOME=.wrangler/config wrangler d1 migrations apply watashi-kaigi-db --remote",
-    "db:registrations": "XDG_CONFIG_HOME=.wrangler/config wrangler d1 execute watashi-kaigi-db --remote --command=\"SELECT order_id, participant_name, participant_email, participant_tel, event_date, ai_experience, payment_status, amount_total, currency, paid_at, organizer_email_sent_at, organizer_email_message_id, organizer_email_last_error FROM registrations ORDER BY created_at DESC\""
+    "db:registrations": "XDG_CONFIG_HOME=.wrangler/config wrangler d1 execute watashi-kaigi-db --remote --command=\"SELECT order_id, participant_name, participant_email, participant_tel, event_date, ai_experience, payment_status, amount_total, currency, paid_at, participant_email_sent_at, participant_email_message_id, participant_email_last_error, organizer_email_sent_at, organizer_email_message_id, organizer_email_last_error FROM registrations ORDER BY created_at DESC\""
   },
   "devDependencies": {
     "wrangler": "^4.106.0"

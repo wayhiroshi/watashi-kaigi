@@ -5,6 +5,17 @@ const STRIPE_CHECKOUT_URL = "https://api.stripe.com/v1/checkout/sessions";
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 const EVENT_NAME = "AIで考える、これからの私会議 参加費";
 const EVENT_PRICE_JPY = 3000;
+const EVENT = Object.freeze({
+  id: "2026-08-30-kobe",
+  date: "2026年8月30日（日）",
+  time: "14:00〜15:30",
+  reception: "13:30",
+  capacity: 6,
+  venueName: "マイスぺ24 神戸スペース",
+  venueAddress: "兵庫県神戸市中央区相生町4-8-20 U.C神戸駅前BLDG. 301号室",
+  venueAccess: "JR神戸駅中央口から徒歩3分",
+});
+const CHECKOUT_HOLD_MINUTES = 35;
 const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 300;
 
 function jsonResponse(body, status = 200) {
@@ -137,7 +148,7 @@ function validateCheckoutPayload(payload) {
   const name = asString(payload.name);
   const email = asString(payload.email);
   const tel = asString(payload.tel);
-  const date = asString(payload.date) || "未選択";
+  const eventId = asString(payload.eventId);
   const aiExperience = asString(payload.aiExperience) || "未選択";
   const agree = payload.agree === true;
 
@@ -146,9 +157,10 @@ function validateCheckoutPayload(payload) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { error: "メールアドレスの形式をご確認ください。" };
   }
+  if (eventId !== EVENT.id) return { error: "開催回を確認できませんでした。" };
   if (!agree) return { error: "同意にチェックを入れてください。" };
 
-  return { value: { name, email, tel, date, aiExperience } };
+  return { value: { name, email, tel, eventId, aiExperience } };
 }
 
 function appendMetadata(params, prefix, metadata) {
@@ -157,12 +169,113 @@ function appendMetadata(params, prefix, metadata) {
   });
 }
 
+async function releaseExpiredSeatHolds(env, now = new Date()) {
+  await env.DB.prepare(`
+    DELETE FROM event_seats
+    WHERE event_id = ?
+      AND status = 'held'
+      AND expires_at <= ?
+  `).bind(EVENT.id, now.toISOString()).run();
+}
+
+export async function getEventAvailability(env, now = new Date()) {
+  if (!env.DB) throw new Error("D1 database binding is missing");
+  await releaseExpiredSeatHolds(env, now);
+  const result = await env.DB.prepare(`
+    SELECT COUNT(*) AS reserved
+    FROM event_seats
+    WHERE event_id = ?
+  `).bind(EVENT.id).first();
+  const reserved = Number(result?.reserved || 0);
+  const remaining = Math.max(0, EVENT.capacity - reserved);
+
+  return {
+    id: EVENT.id,
+    date: EVENT.date,
+    time: EVENT.time,
+    reception: EVENT.reception,
+    capacity: EVENT.capacity,
+    remaining,
+    soldOut: remaining === 0,
+    venueName: EVENT.venueName,
+    venueAccess: EVENT.venueAccess,
+  };
+}
+
+export async function reserveEventSeat(env, orderId, now = new Date()) {
+  if (!env.DB) throw new Error("D1 database binding is missing");
+  await releaseExpiredSeatHolds(env, now);
+  const expiresAt = new Date(
+    now.getTime() + CHECKOUT_HOLD_MINUTES * 60 * 1000,
+  );
+
+  for (let seatNumber = 1; seatNumber <= EVENT.capacity; seatNumber += 1) {
+    const result = await env.DB.prepare(`
+      INSERT OR IGNORE INTO event_seats (
+        event_id,
+        seat_number,
+        order_id,
+        status,
+        expires_at
+      ) VALUES (?, ?, ?, 'held', ?)
+    `).bind(EVENT.id, seatNumber, orderId, expiresAt.toISOString()).run();
+
+    if (Number(result.meta?.changes || 0) === 1) {
+      return { seatNumber, expiresAt };
+    }
+  }
+
+  return null;
+}
+
+async function attachCheckoutSessionToSeat(env, orderId, checkoutSessionId) {
+  await env.DB.prepare(`
+    UPDATE event_seats
+    SET checkout_session_id = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE order_id = ?
+  `).bind(checkoutSessionId, orderId).run();
+}
+
+async function releaseEventSeat(env, session) {
+  if (!env.DB) return;
+  const metadata = session.metadata || {};
+  const orderId = asString(session.client_reference_id || metadata.order_id);
+  const checkoutSessionId = asString(session.id);
+  if (!orderId && !checkoutSessionId) return;
+
+  await env.DB.prepare(`
+    DELETE FROM event_seats
+    WHERE status = 'held'
+      AND (order_id = ? OR checkout_session_id = ?)
+  `).bind(orderId, checkoutSessionId).run();
+}
+
+async function confirmEventSeat(env, session) {
+  const metadata = session.metadata || {};
+  const orderId = asString(session.client_reference_id || metadata.order_id);
+  const checkoutSessionId = asString(session.id);
+  if (!orderId || !checkoutSessionId) return;
+
+  await env.DB.prepare(`
+    UPDATE event_seats
+    SET
+      status = 'paid',
+      checkout_session_id = ?,
+      expires_at = NULL,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE order_id = ?
+  `).bind(checkoutSessionId, orderId).run();
+}
+
 async function createCheckoutSession(request, env) {
   if (!env.STRIPE_SECRET_KEY) {
     return jsonResponse(
       { error: "Stripeの秘密鍵が設定されていません。" },
       500,
     );
+  }
+  if (!env.DB) {
+    return jsonResponse({ error: "申込枠を確認できませんでした。" }, 500);
   }
 
   let payload;
@@ -175,15 +288,23 @@ async function createCheckoutSession(request, env) {
   const validation = validateCheckoutPayload(payload);
   if (validation.error) return jsonResponse({ error: validation.error }, 400);
 
-  const { name, email, tel, date, aiExperience } = validation.value;
+  const { name, email, tel, eventId, aiExperience } = validation.value;
   const baseUrl = getBaseUrl(request, env);
   const orderId = crypto.randomUUID();
+  const seatHold = await reserveEventSeat(env, orderId);
+  if (!seatHold) {
+    return jsonResponse(
+      { error: "満席となりました。次回開催のご案内をお待ちください。", soldOut: true },
+      409,
+    );
+  }
   const metadata = {
     order_id: orderId,
+    event_id: eventId,
     name,
     email,
     tel: tel || "未入力",
-    date,
+    date: `${EVENT.date} ${EVENT.time}`,
     ai_experience: aiExperience,
   };
 
@@ -191,40 +312,57 @@ async function createCheckoutSession(request, env) {
   params.set("mode", "payment");
   params.set("locale", "ja");
   params.set("submit_type", "pay");
+  params.set("payment_method_types[0]", "card");
   params.set("customer_email", email);
   params.set("client_reference_id", orderId);
+  params.set("expires_at", String(Math.floor(seatHold.expiresAt.getTime() / 1000)));
   params.set("success_url", `${baseUrl}/?payment=success&session_id={CHECKOUT_SESSION_ID}#entry`);
   params.set("cancel_url", `${baseUrl}/?payment=cancelled#entry`);
   params.set("line_items[0][quantity]", "1");
   params.set("line_items[0][price_data][currency]", "jpy");
   params.set("line_items[0][price_data][unit_amount]", String(EVENT_PRICE_JPY));
-  params.set("line_items[0][price_data][product_data][name]", EVENT_NAME);
+  params.set(
+    "line_items[0][price_data][product_data][name]",
+    `${EVENT_NAME}（${EVENT.date}）`,
+  );
   params.set(
     "custom_text[submit][message]",
-    "決済完了後、主催者より開催詳細をご連絡します。",
+    "決済完了後、会場詳細を記載した確認メールをお送りします。",
   );
   appendMetadata(params, "metadata", metadata);
   appendMetadata(params, "payment_intent_data[metadata]", metadata);
 
-  const stripeResponse = await fetch(STRIPE_CHECKOUT_URL, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
-      "content-type": "application/x-www-form-urlencoded",
-      "stripe-version": STRIPE_API_VERSION,
-    },
-    body: params,
-  });
+  let stripeResponse;
+  try {
+    stripeResponse = await fetch(STRIPE_CHECKOUT_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+        "content-type": "application/x-www-form-urlencoded",
+        "stripe-version": STRIPE_API_VERSION,
+      },
+      body: params,
+    });
+  } catch (error) {
+    await releaseEventSeat(env, { client_reference_id: orderId });
+    console.error(JSON.stringify({ event: "stripe_network_error", error: error.message }));
+    return jsonResponse(
+      { error: "Stripe決済ページに接続できませんでした。時間をおいて再度お試しください。" },
+      502,
+    );
+  }
 
   let stripePayload;
   try {
     stripePayload = await stripeResponse.json();
   } catch (error) {
+    await releaseEventSeat(env, { client_reference_id: orderId });
     console.error(JSON.stringify({ event: "stripe_invalid_json", error: error.message }));
     return jsonResponse({ error: "Stripeからの応答を確認できませんでした。" }, 502);
   }
 
   if (!stripeResponse.ok || !stripePayload.url) {
+    await releaseEventSeat(env, { client_reference_id: orderId });
     console.error(JSON.stringify({
       event: "stripe_checkout_session_failed",
       status: stripeResponse.status,
@@ -237,6 +375,7 @@ async function createCheckoutSession(request, env) {
     );
   }
 
+  await attachCheckoutSessionToSeat(env, orderId, asString(stripePayload.id));
   return jsonResponse({ url: stripePayload.url, orderId });
 }
 
@@ -277,19 +416,26 @@ export async function handleStripeWebhook(request, env) {
     "checkout.session.async_payment_succeeded",
     "checkout.session.async_payment_failed",
   ].includes(stripeEvent.type);
+  const isPaid = (
+    stripeEvent.type === "checkout.session.async_payment_succeeded"
+    || (
+      stripeEvent.type === "checkout.session.completed"
+      && session.payment_status === "paid"
+    )
+  );
 
   if (isCheckoutEvent) {
     await saveRegistration(env, stripeEvent, session);
 
-    if (
-      stripeEvent.type === "checkout.session.async_payment_succeeded"
-      || (
-        stripeEvent.type === "checkout.session.completed"
-        && session.payment_status === "paid"
-      )
-    ) {
+    if (isPaid) {
+      await confirmEventSeat(env, session);
       await sendOrganizerNotification(env, stripeEvent, session);
+      await sendParticipantConfirmation(env, stripeEvent, session);
+    } else if (stripeEvent.type === "checkout.session.async_payment_failed") {
+      await releaseEventSeat(env, session);
     }
+  } else if (stripeEvent.type === "checkout.session.expired") {
+    await releaseEventSeat(env, session);
   }
 
   const logPayload = {
@@ -299,21 +445,15 @@ export async function handleStripeWebhook(request, env) {
     checkout_session_id: session.id,
     payment_status: session.payment_status,
     order_id: session.client_reference_id || session.metadata?.order_id,
-    customer_email: session.customer_details?.email || session.customer_email,
-    participant_name: session.metadata?.name,
-    event_date: session.metadata?.date,
+    event_id: session.metadata?.event_id,
   };
 
-  if (
-    stripeEvent.type === "checkout.session.async_payment_succeeded"
-    || (
-      stripeEvent.type === "checkout.session.completed"
-      && session.payment_status === "paid"
-    )
-  ) {
+  if (isPaid) {
     console.log(JSON.stringify({ ...logPayload, event: "stripe_checkout_paid" }));
   } else if (stripeEvent.type === "checkout.session.async_payment_failed") {
     console.warn(JSON.stringify({ ...logPayload, event: "stripe_checkout_payment_failed" }));
+  } else if (stripeEvent.type === "checkout.session.expired") {
+    console.log(JSON.stringify({ ...logPayload, event: "stripe_checkout_expired" }));
   } else {
     console.log(JSON.stringify(logPayload));
   }
@@ -356,6 +496,7 @@ export async function saveRegistration(env, stripeEvent, session) {
     env.DB.prepare(`
       INSERT INTO registrations (
         order_id,
+        event_id,
         checkout_session_id,
         payment_intent_id,
         latest_stripe_event_id,
@@ -368,8 +509,9 @@ export async function saveRegistration(env, stripeEvent, session) {
         event_date,
         ai_experience,
         paid_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(checkout_session_id) DO UPDATE SET
+        event_id = excluded.event_id,
         payment_intent_id = excluded.payment_intent_id,
         latest_stripe_event_id = excluded.latest_stripe_event_id,
         payment_status = excluded.payment_status,
@@ -384,6 +526,7 @@ export async function saveRegistration(env, stripeEvent, session) {
         updated_at = CURRENT_TIMESTAMP
     `).bind(
       orderId,
+      asString(metadata.event_id) || EVENT.id,
       checkoutSessionId,
       asString(session.payment_intent) || null,
       stripeEvent.id,
@@ -529,6 +672,169 @@ export async function sendOrganizerNotification(
   return { sent: true, messageId: resendPayload.id };
 }
 
+export async function sendParticipantConfirmation(
+  env,
+  stripeEvent,
+  session,
+  fetchImpl = fetch,
+) {
+  if (!env.DB) throw new Error("D1 database binding is missing");
+  if (!env.RESEND_API_KEY) throw new Error("Resend API key is missing");
+
+  const from = asString(env.RESEND_FROM);
+  const organizerEmail = asString(env.ORGANIZER_EMAIL);
+  if (!from || !organizerEmail) {
+    throw new Error("Participant email configuration is missing");
+  }
+
+  const metadata = session.metadata || {};
+  const checkoutSessionId = asString(session.id);
+  const participantName = asString(metadata.name || session.customer_details?.name) || "参加者";
+  const participantEmail = asString(
+    session.customer_details?.email || session.customer_email || metadata.email,
+  );
+  if (!checkoutSessionId || !participantEmail) {
+    throw new Error("Stripe Checkout event is missing participant email fields");
+  }
+
+  const existing = await env.DB.prepare(`
+    SELECT participant_email_sent_at
+    FROM registrations
+    WHERE checkout_session_id = ?
+  `).bind(checkoutSessionId).first();
+
+  if (existing?.participant_email_sent_at) {
+    return { sent: false, reason: "already_sent" };
+  }
+
+  const subject = `【私会議】お申し込みありがとうございます｜${EVENT.date}`;
+  const cancellation = [
+    "キャンセルについて",
+    "・開催7日前まで：全額返金",
+    "・開催6日前以降：返金はありませんが、次回開催へ1回振替できます",
+    "・当日の欠席・無連絡：返金・振替の対象外です",
+    "・主催者都合で中止する場合：全額返金します",
+  ];
+  const text = [
+    `${participantName}様`,
+    "",
+    "私会議へのお申し込みと決済が完了しました。",
+    "当日は、下記の会場へお越しください。",
+    "",
+    `開催日：${EVENT.date}`,
+    `時間：${EVENT.time}（受付 ${EVENT.reception}）`,
+    `会場：${EVENT.venueName}`,
+    `住所：${EVENT.venueAddress}`,
+    `アクセス：${EVENT.venueAccess}`,
+    "※会場は3階です。エレベーターはありません。",
+    "",
+    "持ち物",
+    "・スマートフォンまたはノートパソコン",
+    "・普段使っている充電器",
+    "・事前にChatGPTへログインしておくと、当日スムーズです",
+    "",
+    "AIを使うときのお願い",
+    "住所、健康情報、勤務先の機密情報など、他人に見られて困る情報は入力しないでください。",
+    "AIの回答は誤ることがあります。医療・法律など専門的な判断は、必ず専門家へご相談ください。",
+    "",
+    ...cancellation,
+    "",
+    "ご不明な点は、このメールへ返信してください。",
+    "当日お会いできることを楽しみにしています。",
+    "",
+    "私会議",
+    "企画・運営：エーテル",
+    `Stripe Event：${asString(stripeEvent.id)}`,
+  ].join("\n");
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Noto Sans JP',sans-serif;line-height:1.8;color:#332b27;max-width:640px">
+      <p>${escapeHtml(participantName)}様</p>
+      <p>私会議へのお申し込みと決済が完了しました。<br>当日は、下記の会場へお越しください。</p>
+      <h2 style="font-size:18px;margin-top:28px">開催情報</h2>
+      <table style="border-collapse:collapse">
+        <tbody>
+          <tr><th style="padding:5px 16px 5px 0;text-align:left;vertical-align:top">開催日</th><td>${escapeHtml(EVENT.date)}</td></tr>
+          <tr><th style="padding:5px 16px 5px 0;text-align:left;vertical-align:top">時間</th><td>${escapeHtml(EVENT.time)}（受付 ${escapeHtml(EVENT.reception)}）</td></tr>
+          <tr><th style="padding:5px 16px 5px 0;text-align:left;vertical-align:top">会場</th><td>${escapeHtml(EVENT.venueName)}</td></tr>
+          <tr><th style="padding:5px 16px 5px 0;text-align:left;vertical-align:top">住所</th><td>${escapeHtml(EVENT.venueAddress)}</td></tr>
+          <tr><th style="padding:5px 16px 5px 0;text-align:left;vertical-align:top">アクセス</th><td>${escapeHtml(EVENT.venueAccess)}</td></tr>
+        </tbody>
+      </table>
+      <p><strong>会場は3階です。エレベーターはありません。</strong></p>
+      <h2 style="font-size:18px;margin-top:28px">持ち物</h2>
+      <ul>
+        <li>スマートフォンまたはノートパソコン</li>
+        <li>普段使っている充電器</li>
+        <li>事前にChatGPTへログインしておくと、当日スムーズです</li>
+      </ul>
+      <h2 style="font-size:18px;margin-top:28px">AIを使うときのお願い</h2>
+      <p>住所、健康情報、勤務先の機密情報など、他人に見られて困る情報は入力しないでください。AIの回答は誤ることがあります。医療・法律など専門的な判断は、必ず専門家へご相談ください。</p>
+      <h2 style="font-size:18px;margin-top:28px">キャンセルについて</h2>
+      <ul>
+        <li>開催7日前まで：全額返金</li>
+        <li>開催6日前以降：返金はありませんが、次回開催へ1回振替できます</li>
+        <li>当日の欠席・無連絡：返金・振替の対象外です</li>
+        <li>主催者都合で中止する場合：全額返金します</li>
+      </ul>
+      <p>ご不明な点は、このメールへ返信してください。<br>当日お会いできることを楽しみにしています。</p>
+      <p>私会議<br>企画・運営：エーテル</p>
+    </div>
+  `;
+
+  const resendResponse = await fetchImpl(RESEND_EMAILS_URL, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "content-type": "application/json",
+      "idempotency-key": `watashi-kaigi/participant-confirmation/${checkoutSessionId}`,
+    },
+    body: JSON.stringify({
+      from,
+      to: [participantEmail],
+      reply_to: organizerEmail,
+      subject,
+      text,
+      html,
+    }),
+  });
+
+  let resendPayload;
+  try {
+    resendPayload = await resendResponse.json();
+  } catch {
+    resendPayload = {};
+  }
+
+  if (!resendResponse.ok || !resendPayload.id) {
+    const errorMessage = asString(resendPayload.message) || `HTTP ${resendResponse.status}`;
+    await env.DB.prepare(`
+      UPDATE registrations
+      SET participant_email_last_error = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE checkout_session_id = ?
+    `).bind(errorMessage.slice(0, 500), checkoutSessionId).run();
+    throw new Error(`Participant confirmation failed: ${errorMessage}`);
+  }
+
+  const sentAt = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE registrations
+    SET
+      participant_email_sent_at = ?,
+      participant_email_message_id = ?,
+      participant_email_last_error = NULL,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE checkout_session_id = ?
+  `).bind(sentAt, resendPayload.id, checkoutSessionId).run();
+
+  console.log(JSON.stringify({
+    event: "participant_confirmation_sent",
+    checkout_session_id: checkoutSessionId,
+    resend_message_id: resendPayload.id,
+  }));
+
+  return { sent: true, messageId: resendPayload.id };
+}
+
 export async function authenticateAdminRequest(request, env) {
   if (env.ADMIN_LOCAL_BYPASS === "true") {
     return { email: "local-admin" };
@@ -566,7 +872,11 @@ export async function getAdminRegistrations(env) {
         COUNT(*) AS total,
         SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) AS paid,
         SUM(CASE WHEN payment_status = 'failed' THEN 1 ELSE 0 END) AS failed,
-        SUM(CASE WHEN organizer_email_last_error IS NOT NULL THEN 1 ELSE 0 END) AS notification_errors
+        SUM(CASE
+          WHEN organizer_email_last_error IS NOT NULL
+            OR participant_email_last_error IS NOT NULL
+          THEN 1 ELSE 0
+        END) AS notification_errors
       FROM registrations
     `).first(),
     env.DB.prepare(`
@@ -579,13 +889,17 @@ export async function getAdminRegistrations(env) {
         participant_name,
         participant_email,
         participant_tel,
+        event_id,
         event_date,
         ai_experience,
         paid_at,
         created_at,
         organizer_email_sent_at,
         organizer_email_message_id,
-        organizer_email_last_error
+        organizer_email_last_error,
+        participant_email_sent_at,
+        participant_email_message_id,
+        participant_email_last_error
       FROM registrations
       ORDER BY created_at DESC
       LIMIT 200
@@ -677,6 +991,19 @@ export default {
       } catch (error) {
         console.error(JSON.stringify({ event: "checkout_unhandled_error", error: error.message }));
         return jsonResponse({ error: "決済ページの準備中に問題が発生しました。" }, 500);
+      }
+    }
+
+    if (url.pathname === "/api/event-status") {
+      if (request.method !== "GET") {
+        return jsonResponse({ error: "この操作にはGETリクエストが必要です。" }, 405);
+      }
+
+      try {
+        return jsonResponse(await getEventAvailability(env));
+      } catch (error) {
+        console.error(JSON.stringify({ event: "event_status_error", error: error.message }));
+        return jsonResponse({ error: "空席状況を取得できませんでした。" }, 500);
       }
     }
 
