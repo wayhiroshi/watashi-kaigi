@@ -17,11 +17,18 @@ function setError(name, message) {
 function clearErrors() {
   document.querySelectorAll(".error-message").forEach((el) => { el.textContent = ""; });
 }
-function openModal({ title, message, href, linkText }) {
+function openModal({
+  title,
+  message,
+  href,
+  linkText,
+  closeOnClick = false,
+}) {
   modalTitle.textContent = title;
   modalMessage.textContent = message;
   checkoutLink.textContent = linkText;
   checkoutLink.href = href;
+  checkoutLink.dataset.closeModal = String(closeOnClick);
   modal.classList.add("is-open");
   modal.setAttribute("aria-hidden", "false");
 }
@@ -69,6 +76,9 @@ async function loadEventStatus() {
 }
 
 document.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", closeModal));
+checkoutLink.addEventListener("click", () => {
+  if (checkoutLink.dataset.closeModal === "true") closeModal();
+});
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
 loadEventStatus();
 
@@ -77,9 +87,11 @@ if (paymentStatus === "success") {
   openModal({
     title: "決済を受け付けました",
     message: "決済を確認後、開催日時と会場詳細を記載したメールが自動で届きます。受信箱をご確認ください。",
-    href: "#entry",
-    linkText: "申し込み欄に戻る",
+    href: "#top",
+    linkText: "ページに戻る",
+    closeOnClick: true,
   });
+  window.history.replaceState({}, "", window.location.pathname);
 } else if (paymentStatus === "cancelled") {
   setError("form", "決済は完了していません。内容をご確認のうえ、もう一度お試しください。");
 }
